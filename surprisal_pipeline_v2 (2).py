@@ -1,16 +1,15 @@
 """
 Surprisal extraction pipeline for scalar-implicature seminar project.
 Items drawn from Breheny, Katsos & Williams (2006), Experiment 3,
-Appendix A.3 (English translations, as published) -- the Implicit
+Appendix A.3 -- the Implicit
 Upper-Bound vs Implicit Lower-Bound conditions with trigger "some".
-
-Run on Google Colab: no GPU needed for GPT-2 small.
-  !pip install transformers torch pandas scipy
 """
 
 import re
 import torch
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
 # Two models: GPT-2 small (124M params) and GPT-2 medium (355M params).
@@ -215,3 +214,41 @@ if __name__ == "__main__":
     combined = pd.concat(all_dfs, ignore_index=True)
     combined.to_csv("surprisal_results_both_models.csv", index=False)
     print("\nSaved combined results to surprisal_results_both_models.csv")
+
+    # -------------------------------------------------------------
+    # Plot: mean surprisal by trigger type and condition, one panel
+    # per model. Suitable for dropping into the summary/poster.
+    # -------------------------------------------------------------
+    fig, axes = plt.subplots(1, len(MODEL_NAMES), figsize=(10, 4.5), sharey=True)
+    if len(MODEL_NAMES) == 1:
+        axes = [axes]
+
+    trigger_groups = [("some", [1, 2, 3, 4]), ("or", [5, 6, 7, 8])]
+    bar_width = 0.35
+    x = np.arange(len(trigger_groups))
+
+    for ax, model_name in zip(axes, MODEL_NAMES):
+        df_m = combined[combined["model"] == model_name]
+        wide_m = df_m.pivot(index="item_id", columns="condition",
+                             values="surprisal_bits")
+
+        upper_means, lower_means = [], []
+        for _, ids in trigger_groups:
+            sub = wide_m.loc[wide_m.index.isin(ids)]
+            upper_means.append(sub["upper_bound"].mean())
+            lower_means.append(sub["lower_bound"].mean())
+
+        ax.bar(x - bar_width / 2, upper_means, bar_width, label="Upper-bound")
+        ax.bar(x + bar_width / 2, lower_means, bar_width, label="Lower-bound")
+        ax.set_xticks(x)
+        ax.set_xticklabels([g[0] for g in trigger_groups])
+        ax.set_title(model_name)
+        ax.set_xlabel("Trigger word")
+
+    axes[0].set_ylabel("Mean surprisal (bits)")
+    axes[0].legend()
+    fig.suptitle("GPT-2 Surprisal by Trigger Type, Condition, and Model Size")
+    fig.tight_layout()
+    fig.savefig("surprisal_plot.png", dpi=200, bbox_inches="tight")
+    print("\nSaved plot to surprisal_plot.png")
+    plt.show()
